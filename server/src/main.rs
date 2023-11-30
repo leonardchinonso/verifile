@@ -7,6 +7,6 @@ fn main() {
     // initialize the logger
     Builder::new().filter(None, LevelFilter::Info).init();
 
-    let server = server::Server::new();
-    server.process();
+    let mut server = server::Server::new();
+    server.start();
 }
