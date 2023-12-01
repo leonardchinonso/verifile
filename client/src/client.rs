@@ -93,12 +93,10 @@ impl Client {
             .write_all(&size.to_be_bytes())
             .expect("Failed to send file size of 0 to server");
 
-        // delete the files from storage
         for file_name in self.file_names.iter() {
             std::fs::remove_file(file_name).expect("Failed to remove file");
         }
 
-        // delete all files from the client object
         self.file_names.clear();
         self.files_data.clear();
 
@@ -106,12 +104,15 @@ impl Client {
     }
 
     fn verify_download_request(&mut self, index: usize) -> Result<(), String> {
-        let mut file = File::open(FILES_DATA_NAME).expect("Failed to open file");
+        let mut file = File::open(FILES_DATA_NAME)
+            .expect("json file holding merkle root should not fail to open");
 
         let mut json = String::new();
-        file.read_to_string(&mut json).expect("Failed to read file");
+        file.read_to_string(&mut json)
+            .expect("merkle root file conversion to string should not fail");
 
-        let data: DiskData = serde_json::from_str(&json).expect("Failed to deserialize data");
+        let data: DiskData =
+            serde_json::from_str(&json).expect("disk data deserialization should not fail");
 
         if index >= data.files_count {
             return Err(String::from("file index to download is not available"));
@@ -124,17 +125,16 @@ impl Client {
     }
 
     fn get_merkle_proof_from_server(&mut self, index: usize) -> Result<Vec<u8>, String> {
-        // open a stream to send multiple files
-        let mut stream = TcpStream::connect(SERVER_ADDRESS).expect("Failed to connect to server.");
+        let mut stream =
+            TcpStream::connect(SERVER_ADDRESS).expect("client should connect to the server stream");
 
-        // send the file index to download
         stream
             .write_all(&index.to_be_bytes())
-            .expect("Failed to send file index to server");
+            .expect("file index should be sent to the server");
 
         // Create a new file
         let mut json_proof_file = File::create(format!("files/merkle_proof_{}.json", index))
-            .expect("Cannot create file to download to");
+            .expect("json proof file creation should not fail");
 
         // Buffer to hold file data
         let mut json_proof_buf = Vec::new();
@@ -158,37 +158,34 @@ impl Client {
         self.verify_download_request(index)?;
 
         let json_proof_buf = self.get_merkle_proof_from_server(index)?;
-        let mp: MerkleProof =
-            serde_json::from_slice(&json_proof_buf).expect("Failed to deserialize proof");
+        let mp: MerkleProof = serde_json::from_slice(&json_proof_buf)
+            .expect("merkle proof deserialization should not fail");
 
         let generated_root = compute_merkle_root_from_proof(mp, index);
 
-        // TODO(development): Compare the generated root to the merkle root stored on disk
+        assert_eq!(self.merkle_root, generated_root, "The file downloaded at index: {} is corrupt. Expected merkle root: {}, Actual merkle root: {}", index, self.merkle_root, generated_root);
 
         Ok(())
     }
 }
 
 /// compute_merkle_root_from_proof computes the root of the merkle tree given the siblings
-/// by walking up the merkle tree until the root
+/// by walking up the merkle tree until the root.
+/// Each node can either be a left or right node, compute the node hash with that information
 fn compute_merkle_root_from_proof(proof: MerkleProof, index: usize) -> String {
     let mut curr_hash = digest(proof.file_buffer());
     let mut siblings = proof.siblings();
     let mut curr_index = index;
 
-    // sort the siblings by levels, starting from the sibling of the leaf node
     siblings.sort_by(|(lvl1, _, _), (lvl2, _, _)| lvl2.cmp(&lvl1));
 
     for (_, _, sibling_hash) in siblings {
         curr_hash = if curr_index % 2 == 0 {
-            // if current node is a left node, sibling is right
             digest(format!("{}{}", curr_hash, sibling_hash))
         } else {
-            // if curr node is a right node, then sibling is left
             digest(format!("{}{}", sibling_hash, curr_hash))
         };
 
-        // set index to parent index
         curr_index /= 2;
     }
 
