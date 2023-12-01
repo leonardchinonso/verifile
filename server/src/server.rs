@@ -1,3 +1,4 @@
+use common::model::merkle::{MerkleProof, MerkleTree};
 use common::SERVER_ADDRESS;
 use log::{error, info};
 use std::fs::File;
@@ -11,15 +12,17 @@ enum ServerState {
 }
 
 pub struct Server {
-    files: Vec<String>,
+    files_data: Vec<Vec<u8>>,
     state: ServerState,
+    merkle_tree: MerkleTree,
 }
 
 impl Server {
     pub fn new() -> Self {
         Self {
-            files: Vec::new(),
+            files_data: Vec::new(),
             state: ServerState::Receive,
+            merkle_tree: MerkleTree::new(),
         }
     }
 
@@ -47,6 +50,9 @@ impl Server {
 
                     // Write the file data
                     file.write_all(&file_buf).unwrap();
+
+                    // add the file to the list of files
+                    self.files_data.push(file_buf);
                 }
                 Err(e) => {
                     error!("Error reading file contents: {e}");
@@ -54,6 +60,9 @@ impl Server {
                 }
             }
         }
+
+        // build a merkle tree from the list of file data
+        self.merkle_tree = MerkleTree::from(self.files_data.clone());
 
         self.state = ServerState::Send;
     }
@@ -72,8 +81,13 @@ impl Server {
                 let mut file_buf = Vec::new();
                 file.read_to_end(&mut file_buf).unwrap();
 
+                let mp = MerkleProof::build(&self.merkle_tree, index as usize, file_buf.clone());
+                let json_proof = mp.to_string();
+
                 // write the file contents to the server over the stream
-                stream.write_all(&file_buf).expect("Failed to send file content to client");
+                stream
+                    .write_all(json_proof.as_bytes())
+                    .expect("Failed to send file content to client");
             }
             Err(e) => {
                 error!("Error reading file index: {e}");
