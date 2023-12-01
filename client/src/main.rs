@@ -1,8 +1,8 @@
-use std::error::Error;
+use crate::args::Action;
+use clap::Parser;
 use env_logger::Builder;
 use log::{info, LevelFilter};
-use clap::Parser;
-use crate::args::Action;
+use std::error::Error;
 
 mod args;
 mod client;
@@ -24,10 +24,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             client.add_files(args.file_names()); // add the files to the client
             client.process_files(); // compute the merkle root and prep the files
             client.send_files(); // send the files to the server
-        },
+        }
         Action::Download(n) => {
             client.download_file(n)?;
-        },
+        }
     }
 
     Ok(())

@@ -2,7 +2,6 @@ use clap::Parser;
 use std::fmt::Debug;
 use std::str::FromStr;
 
-
 #[derive(Debug, Clone)]
 pub enum Action {
     Send,
@@ -22,7 +21,12 @@ impl FromStr for Action {
         match s {
             "send" => Ok(Action::Send),
             _ if s.starts_with("download-") => {
-                let number = s.split('-').last().unwrap().parse::<usize>().map_err(|_| "Invalid number")?;
+                let number = s
+                    .split('-')
+                    .last()
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_| "Invalid number")?;
                 Ok(Action::Download(number))
             }
             _ => Err(format!("{} is not a valid Action", s)),
@@ -34,7 +38,7 @@ impl ToString for Action {
     fn to_string(&self) -> String {
         match self {
             Action::Send => "send".to_string(),
-            Action::Download(n) => n.to_string()
+            Action::Download(n) => n.to_string(),
         }
     }
 }
@@ -47,7 +51,7 @@ pub struct Argument {
     #[clap(short, long)]
     action: Action,
     /// name of the text file to compress
-    #[clap(short, long, value_delimiter=',')]
+    #[clap(short, long, value_delimiter = ',')]
     file_names: Vec<String>,
 }
 
@@ -64,7 +68,9 @@ impl Argument {
     // TODO(production): should add more validations and file sanitization
     fn validate_file_name(&self, name: &String) -> Result<(), String> {
         if name.split(".").count() != 2 {
-            return Err(String::from("file name should be in format 'file_name.file_type'"));
+            return Err(String::from(
+                "file name should be in format 'file_name.file_type'",
+            ));
         }
 
         Ok(())
