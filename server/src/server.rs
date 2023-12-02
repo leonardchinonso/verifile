@@ -3,7 +3,6 @@ use common::model::merkle::{MerkleProof, MerkleTree};
 use common::SERVER_ADDRESS;
 use log::{error, info};
 use std::collections::HashMap;
-use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
@@ -57,26 +56,16 @@ impl Server {
     /// builds a Merkle proof for the file, and sends the proof over the stream
     fn handle_send_file_with_merkle_proof(&self, mut stream: TcpStream) {
         let mut buffer = [0; 8];
+        stream.read_exact(&mut buffer).expect("file index should be available");
 
-        match stream.read_exact(&mut buffer) {
-            Ok(_) => {
-                let index = u64::from_be_bytes(buffer);
-                let mut file =
-                    File::open(format!("{}.txt", index)).expect("should open file for reading");
-                let mut file_buf = Vec::new();
-                file.read_to_end(&mut file_buf).unwrap();
+        let index = u64::from_be_bytes(buffer) as usize;
+        let file_info = self.store.get(&index).expect("file index should be in the server store");
 
-                let mp = MerkleProof::build(&self.merkle_tree, index as usize, file_buf.clone());
-                let json_proof = mp.to_string();
-                stream
-                    .write_all(json_proof.as_bytes())
-                    .expect("sending file content to client should not fail");
-            }
-            Err(e) => {
-                error!("Error reading file index: {e}");
-                panic!("{}", e); // broken pipe or connection timeout.. should not happen
-            }
-        }
+        let mp = MerkleProof::build(&self.merkle_tree, index, file_info.name(), file_info.content());
+        let json_proof = mp.to_string();
+        stream
+            .write_all(json_proof.as_bytes())
+            .expect("sending file content to client should not fail");
     }
 
     pub fn start(&mut self) {

@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::str::FromStr;
 
-const FILES_DATA_NAME: &str = "files/file_data.json";
+const FILES_DATA_NAME: &str = "files/merkle.json";
 
 #[derive(Serialize, Deserialize)]
 struct DiskData {
@@ -70,7 +70,7 @@ impl Client {
             .into_iter()
             .enumerate()
             .for_each(|(index, file_name)| {
-                let mut file = File::open(&file_name).unwrap();
+                let mut file = File::open(&file_name).expect("file should be present");
                 let mut file_buf = Vec::new();
                 file.read_to_end(&mut file_buf).unwrap();
                 self.files.push(FileInfo::new(index, file_name, file_buf));
@@ -129,7 +129,7 @@ impl Client {
     /// by walking up the merkle tree until the root.
     /// Each node can either be a left or right node, compute the node hash with that information
     fn compute_merkle_root_from_proof(&self, proof: &MerkleProof, index: usize) -> String {
-        let mut curr_hash = digest(proof.file_buffer());
+        let mut curr_hash = digest(proof.file_content());
         let mut siblings = proof.siblings();
         let mut curr_index = index;
 
@@ -191,15 +191,12 @@ impl Client {
     /// file and computes and compares the merkle root using the proof from the server
     pub fn download_verify_and_write_file(&mut self, index: usize) -> Result<(), String> {
         self.validate_file_index_and_update_root(index)?;
-
         let mp = self.fetch_merkle_proof(index)?;
-
         let generated_root = self.compute_merkle_root_from_proof(&mp, index);
-
         assert_eq!(self.merkle_root, generated_root, "The file downloaded at index: {} is corrupt. Expected merkle root: {}, Actual merkle root: {}", index, self.merkle_root, generated_root);
 
-        let download_buf = mp.file_buffer();
-        let mut download = File::create(format!("files/{}.txt", index))
+        let download_buf = mp.file_content();
+        let mut download = File::create(mp.file_name())
             .expect("downloaded file creation should not fail");
         download.write_all(&download_buf).unwrap();
 
