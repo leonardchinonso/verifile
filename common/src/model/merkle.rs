@@ -180,25 +180,31 @@ impl From<Vec<Vec<u8>>> for MerkleTree {
 /// MerkleProof represents the proof for a file index
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MerkleProof {
+    file_name: String,
+    file_content: Vec<u8>,
     siblings: Vec<(usize, usize, String)>,
-    file_buffer: Vec<u8>,
 }
 
 impl MerkleProof {
-    pub fn build(tree: &MerkleTree, index: usize, file_buffer: Vec<u8>) -> Self {
+    pub fn build(tree: &MerkleTree, index: usize, file_name: String, file_content: Vec<u8>) -> Self {
         let siblings = tree.get_siblings_of_merkle_path_nodes(index);
         Self {
+            file_name,
             siblings,
-            file_buffer,
+            file_content,
         }
+    }
+
+    pub fn file_name(&self) -> String {
+        self.file_name.clone()
+    }
+
+    pub fn file_content(&self) -> Vec<u8> {
+        self.file_content.clone()
     }
 
     pub fn siblings(&self) -> Vec<(usize, usize, String)> {
         self.siblings.clone()
-    }
-
-    pub fn file_buffer(&self) -> Vec<u8> {
-        self.file_buffer.clone()
     }
 }
 
