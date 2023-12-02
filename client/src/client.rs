@@ -65,30 +65,7 @@ impl Client {
 /// this implementation has methods concerned with sending files to the server
 impl Client {
     /// load_files_into_memory loads the contents of the specified files into memory
-    // pub fn load_files_into_memory(&mut self, file_names: Vec<String>) {
-    //     self.files_count = file_names.len();
-    //     self.file_names = file_names;
-    //
-    //     for file_name in self.file_names.iter() {
-    //         let mut file = File::open(file_name).unwrap();
-    //         let mut file_buf = Vec::new();
-    //         file.read_to_end(&mut file_buf).unwrap();
-    //         self.files_data.push(file_buf);
-    //     }
-    // }
-
-    /// load_files_into_memory loads the contents of the specified files into memory
     pub fn load_files_into_memory(&mut self, file_names: Vec<String>) {
-        // self.files_count = file_names.len();
-        // self.file_names = file_names;
-        //
-        // for file_name in self.file_names.iter() {
-        //     let mut file = File::open(file_name).unwrap();
-        //     let mut file_buf = Vec::new();
-        //     file.read_to_end(&mut file_buf).unwrap();
-        //     self.files_data.push(file_buf);
-        // }
-
         file_names
             .into_iter()
             .enumerate()
@@ -164,33 +141,30 @@ impl Client {
             } else {
                 digest(format!("{}{}", sibling_hash, curr_hash))
             };
-
             curr_index /= 2;
         }
 
         curr_hash
     }
 
-    /// fetch_merkle_proof_and_save fetches the Merkle proof for a given file index from the server,
-    /// saves it to a JSON file, and returns the proof as a byte vector
-    fn fetch_merkle_proof_and_save(&mut self, index: usize) -> Result<Vec<u8>, String> {
+    /// fetch_merkle_proof fetches the Merkle proof for a given file index from the server,
+    fn fetch_merkle_proof(&mut self, index: usize) -> Result<MerkleProof, String> {
         let mut stream =
             TcpStream::connect(SERVER_ADDRESS).expect("client should connect to the server stream");
         stream
             .write_all(&index.to_be_bytes())
             .expect("file index should be sent to the server");
 
-        let mut json_proof_file = File::create(format!("files/merkle_proof_{}.json", index))
-            .expect("json proof file creation should not fail");
         let mut json_proof_buf = Vec::new();
         if let Err(e) = stream.read_to_end(&mut json_proof_buf) {
-            error!("Error reading downloaded content: {}", e);
-            return Err(format!("Error reading downloaded content: {}", e));
+            error!("Error reading merkle proof from server: {}", e);
+            return Err(format!("Error reading merkle proof from server: {}", e));
         }
 
-        json_proof_file.write_all(&json_proof_buf).unwrap();
+        let proof = serde_json::from_slice(&json_proof_buf)
+            .expect("merkle proof deserialization should not fail");
 
-        Ok(json_proof_buf)
+        Ok(proof)
     }
 
     /// validate_file_index_and_update_root validates the requested file index and updates
@@ -218,9 +192,7 @@ impl Client {
     pub fn download_verify_and_write_file(&mut self, index: usize) -> Result<(), String> {
         self.validate_file_index_and_update_root(index)?;
 
-        let json_proof_buf = self.fetch_merkle_proof_and_save(index)?;
-        let mp: MerkleProof = serde_json::from_slice(&json_proof_buf)
-            .expect("merkle proof deserialization should not fail");
+        let mp = self.fetch_merkle_proof(index)?;
 
         let generated_root = self.compute_merkle_root_from_proof(&mp, index);
 
