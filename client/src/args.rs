@@ -108,7 +108,7 @@ mod test {
             file_names: Some(file_names.clone()),
         };
 
-        assert_eq!(args.file_names, file_names);
+        assert_eq!(args.file_names.unwrap(), file_names);
         assert_eq!(args.action.to_string(), Action::Send.to_string());
     }
 }
