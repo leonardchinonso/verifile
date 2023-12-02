@@ -45,14 +45,12 @@ impl ToString for Action {
 
 #[derive(Parser, Debug, Default)]
 #[clap(author = "Author Name", version, about)]
-/// A text compressor
 pub struct Argument {
-    /// action to carry out
     #[clap(short, long)]
     action: Action,
-    /// name of the text file to compress
+
     #[clap(short, long, value_delimiter = ',')]
-    file_names: Vec<String>,
+    file_names: Option<Vec<String>>,
 }
 
 impl Argument {
@@ -61,29 +59,39 @@ impl Argument {
     }
 
     pub fn file_names(&self) -> Vec<String> {
-        self.file_names.clone()
+        self.file_names
+            .clone()
+            .expect("file names should not be absent")
     }
 
-    /// validate_file_name checks that the file name is a valid one and eats whitespaces
     // TODO(production): should add more validations and file sanitization
-    fn validate_file_name(&self, name: &String) -> Result<(), String> {
-        if name.split(".").count() != 2 {
-            return Err(String::from(
-                "file name should be in format 'file_name.file_type'",
-            ));
+    fn validate_file_names(&self) -> Result<(), String> {
+        for name in self
+            .file_names
+            .clone()
+            .expect("file_names should not be absent")
+            .iter()
+        {
+            if name.split(".").count() != 2 {
+                return Err(String::from(
+                    "file name should be in format 'file_name.file_type'",
+                ));
+            }
         }
 
         Ok(())
     }
 
-    pub fn validate_file_names(&self) -> Result<(), String> {
-        for name in self.file_names.iter() {
-            let result = self.validate_file_name(name);
-            if result.is_err() {
-                return result;
+    /// validate validates the Argument instance
+    pub fn validate(&self) -> Result<(), String> {
+        if let Action::Send = self.action {
+            if self.file_names.is_none() {
+                return Err(String::from(
+                    "file names should be sent with the 'send' actions",
+                ));
             }
+            self.validate_file_names()?;
         }
-
         Ok(())
     }
 }
@@ -91,14 +99,13 @@ impl Argument {
 #[cfg(test)]
 mod test {
     use super::*;
-
     #[test]
     fn parsing_argument_works() {
         let file_names = vec![String::from("dummy1.txt"), String::from("dummy2.txt")];
 
         let args = Argument {
             action: Default::default(),
-            file_names: file_names.clone(),
+            file_names: Some(file_names.clone()),
         };
 
         assert_eq!(args.file_names, file_names);

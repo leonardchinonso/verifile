@@ -8,25 +8,20 @@ mod args;
 mod client;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    // initialize the logger
     Builder::new().filter(None, LevelFilter::Info).init();
 
-    // get arguments from CLI
     let mut args = args::Argument::parse();
     info!("{:?}", args);
 
-    // create a client
     let mut client = client::Client::new();
 
     match args.action() {
         Action::Send => {
-            args.validate_file_names()?;
-            client.add_files(args.file_names()); // add the files to the client
-            client.process_files(); // compute the merkle root and prep the files
-            client.send_files(); // send the files to the server
+            args.validate()?;
+            client.prepare_and_send_files(args.file_names());
         }
         Action::Download(n) => {
-            client.download_file(n)?;
+            client.download_verify_and_write_file(n)?;
         }
     }
 

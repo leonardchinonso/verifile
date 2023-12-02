@@ -42,7 +42,6 @@ impl MerkleTree {
 
     /// compute_root builds the merkle tree level by level using a queue
     fn compute_root(&mut self) {
-        // if there's only one node, then it should be the merkle root since it is hashed
         if self.data.len() == 1 {
             self.root = Rc::clone(&self.data[0]);
             return;
@@ -51,17 +50,13 @@ impl MerkleTree {
         let mut queue: VecDeque<Rc<RefCell<MerkleNode>>> = VecDeque::new();
         let mut next_level_queue: VecDeque<Rc<RefCell<MerkleNode>>> = VecDeque::new();
 
-        // push all the leaf nodes into the queue
         self.data
             .iter()
             .for_each(|node| queue.push_back(Rc::clone(node)));
 
         while !queue.is_empty() {
-            // unwrap the left node because there is guaranteed to be at least one node in the queue
             let left = queue.pop_front().unwrap();
             let left_ref = left.borrow();
-
-            // compute parent details from left node
             let parent_index = left_ref.index / 2;
             let parent_level = left_ref.level - 1;
 
@@ -72,7 +67,6 @@ impl MerkleTree {
                 None => digest(format!("{}{}", left_ref.value, left_ref.value)),
             };
 
-            // build the parent node and add it to the store
             let parent = Rc::new(RefCell::new(MerkleNode::new(
                 parent_level,
                 parent_index,
@@ -81,16 +75,13 @@ impl MerkleTree {
             self.store
                 .insert((parent_level, parent_index), Rc::clone(&parent));
 
-            // if the parent level is 0, it means we're at the root node, stop the iteration
             if parent_level == 0 {
                 self.root = parent;
                 return;
             }
 
-            // push the node to the next level queue
             next_level_queue.push_back(Rc::clone(&parent));
 
-            // if the queue is empty, a level has finished, set the queue to the next level
             if queue.is_empty() {
                 queue = next_level_queue;
                 next_level_queue = VecDeque::new();
@@ -98,7 +89,7 @@ impl MerkleTree {
         }
     }
 
-    /// get_sibling_hash_from_node_level_and_index gets the sibling node of a node given its id
+    /// get_sibling_from_node_level_and_index gets the sibling node of a node given its id
     fn get_sibling_from_node_level_and_index(
         &self,
         level: usize,
@@ -124,11 +115,10 @@ impl MerkleTree {
             index - 1
         };
 
-        // get the node from the hashmap
         let node = self
             .store
             .get(&(level, sibling_index))
-            .expect("sibling node not in store");
+            .expect("sibling node should be in the merkle root store");
 
         return (level, sibling_index, node.borrow().value.clone());
     }
@@ -139,22 +129,17 @@ impl MerkleTree {
         if index < 0 || index >= self.data.len() {
             panic!("node index is invalid");
         }
-
-        // path can only be as long the height of the merkle tree
         let mut path = vec![(0, 0); self.height];
-
         for lvl in (1..self.height + 1).rev() {
-            // note: array is zero-indexed, so subtract one
             path[lvl - 1] = (lvl, index);
-            index /= 2; // set to parent index
+            index /= 2;
         }
-
         path
     }
 
     /// get_siblings_of_merkle_path_nodes gets all the siblings of the nodes in the
     /// current node's merkle path, given the node id
-    fn get_sibling_hashes_of_merkle_path_nodes(&self, index: usize) -> Vec<(usize, usize, String)> {
+    fn get_siblings_of_merkle_path_nodes(&self, index: usize) -> Vec<(usize, usize, String)> {
         self.get_merkle_path_from_node_index(index)
             .into_iter()
             .map(|(lvl, idx)| self.get_sibling_from_node_level_and_index(lvl, idx))
@@ -173,29 +158,21 @@ impl From<Vec<Vec<u8>>> for MerkleTree {
             panic!("data cannot be empty");
         }
 
-        // create a skeleton tree
         let mut tree = MerkleTree::new();
 
         // if N is the number of leaf nodes in the tree, then N = 2^H; H = log2(N)
         tree.height = (data.len() as f64).log2().ceil() as usize;
-
-        // convert the data to leaf nodes in the tree
         tree.data = data
             .into_iter()
             .enumerate()
             .map(|(i, d)| {
                 let (level, index, value) = (tree.height, i, digest(d));
-                // 0 is the level since it is a leaf node
                 let node = Rc::new(RefCell::new(MerkleNode::new(level, index, value)));
-                // add all the leaf nodes to the hashmap
                 tree.store.insert((tree.height, i), Rc::clone(&node));
                 node
             })
             .collect::<Vec<Rc<RefCell<MerkleNode>>>>();
-
-        // compute the root node and all its children
         tree.compute_root();
-
         tree
     }
 }
@@ -209,7 +186,7 @@ pub struct MerkleProof {
 
 impl MerkleProof {
     pub fn build(tree: &MerkleTree, index: usize, file_buffer: Vec<u8>) -> Self {
-        let siblings = tree.get_sibling_hashes_of_merkle_path_nodes(index);
+        let siblings = tree.get_siblings_of_merkle_path_nodes(index);
         Self {
             siblings,
             file_buffer,
@@ -227,7 +204,7 @@ impl MerkleProof {
 
 impl ToString for MerkleProof {
     fn to_string(&self) -> String {
-        return serde_json::to_string(self).unwrap();
+        serde_json::to_string(self).expect("merkle proof deserialization should not fail")
     }
 }
 
@@ -329,7 +306,7 @@ mod test {
         let vector = build_merkle_vector(&data);
         let merkle_tree = super::MerkleTree::from(data);
 
-        let sibling_hashes = merkle_tree.get_sibling_hashes_of_merkle_path_nodes(0);
+        let sibling_hashes = merkle_tree.get_siblings_of_merkle_path_nodes(0);
         assert_eq!(
             sibling_hashes,
             vec![
@@ -356,7 +333,7 @@ mod test {
                 ),
             ]
         );
-        let sibling_hashes = merkle_tree.get_sibling_hashes_of_merkle_path_nodes(6);
+        let sibling_hashes = merkle_tree.get_siblings_of_merkle_path_nodes(6);
         assert_eq!(
             sibling_hashes,
             vec![
