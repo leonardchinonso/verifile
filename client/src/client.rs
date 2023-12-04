@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::str::FromStr;
 
-const FILES_DATA_NAME: &str = "files/merkle.json";
+const FILES_DATA_NAME: &str = "merkle.json";
 
 #[derive(Serialize, Deserialize)]
 struct DiskData {
