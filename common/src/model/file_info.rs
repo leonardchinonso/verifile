@@ -42,3 +42,11 @@ impl FromStr for FileInfo {
         serde_json::from_str(s).map_err(|_| String::from("file deserialization should not fail"))
     }
 }
+
+impl PartialEq<Self> for FileInfo {
+    fn eq(&self, other: &Self) -> bool {
+        self.content == other.content && self.index == other.index && self.name == other.name
+    }
+}
+
+impl Eq for FileInfo {}
