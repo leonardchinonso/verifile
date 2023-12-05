@@ -193,7 +193,8 @@ impl Client {
         self.validate_file_index_and_update_root(index)?;
         let mp = self.fetch_merkle_proof(index)?;
         let generated_root = self.compute_merkle_root_from_proof(&mp, index);
-        assert_eq!(self.merkle_root, generated_root, "The file downloaded at index: {} is corrupt. Expected merkle root: {}, Actual merkle root: {}", index, self.merkle_root, generated_root);
+        assert_eq!(self.merkle_root, generated_root, "The file downloaded at index: {} is corrupt. \
+        Expected merkle root: {}, Actual merkle root: {}", index, self.merkle_root, generated_root);
 
         let download_buf = mp.file_content();
         let mut download = File::create(mp.file_name())
