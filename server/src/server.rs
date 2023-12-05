@@ -56,12 +56,22 @@ impl Server {
     /// builds a Merkle proof for the file, and sends the proof over the stream
     fn handle_send_file_with_merkle_proof(&self, mut stream: TcpStream) {
         let mut buffer = [0; 8];
-        stream.read_exact(&mut buffer).expect("file index should be available");
+        stream
+            .read_exact(&mut buffer)
+            .expect("file index should be available");
 
         let index = u64::from_be_bytes(buffer) as usize;
-        let file_info = self.store.get(&index).expect("file index should be in the server store");
+        let file_info = self
+            .store
+            .get(&index)
+            .expect("file index should be in the server store");
 
-        let mp = MerkleProof::build(&self.merkle_tree, index, file_info.name(), file_info.content());
+        let mp = MerkleProof::build(
+            &self.merkle_tree,
+            index,
+            file_info.name(),
+            file_info.content(),
+        );
         let json_proof = mp.to_string();
         stream
             .write_all(json_proof.as_bytes())

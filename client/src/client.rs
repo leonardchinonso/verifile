@@ -81,13 +81,14 @@ impl Client {
 
     /// build_merkle_tree_and_save_to_disk builds a merkle tree from the files
     /// and saves the merkle root and the number of files to disk
-    pub fn build_merkle_tree_and_save_to_disk(&self) {
+    pub fn build_merkle_tree_and_save_to_disk(&mut self) {
         let bufs = self
             .files
             .iter()
             .map(|file| file.content())
             .collect::<Vec<Vec<u8>>>();
         let merkle_tree = MerkleTree::from(bufs);
+        self.merkle_root = merkle_tree.root_hash();
         let disk_json = DiskData::build(merkle_tree.root_hash(), self.files.len()).to_string();
         let mut file = File::create(FILES_DATA_NAME).expect("json file creation should not fail");
         file.write_all(disk_json.as_bytes())
@@ -193,14 +194,110 @@ impl Client {
         self.validate_file_index_and_update_root(index)?;
         let mp = self.fetch_merkle_proof(index)?;
         let generated_root = self.compute_merkle_root_from_proof(&mp, index);
-        assert_eq!(self.merkle_root, generated_root, "The file downloaded at index: {} is corrupt. \
-        Expected merkle root: {}, Actual merkle root: {}", index, self.merkle_root, generated_root);
+        assert_eq!(
+            self.merkle_root, generated_root,
+            "The file downloaded at index: {} is corrupt. \
+        Expected merkle root: {}, Actual merkle root: {}",
+            index, self.merkle_root, generated_root
+        );
 
         let download_buf = mp.file_content();
-        let mut download = File::create(mp.file_name())
-            .expect("downloaded file creation should not fail");
+        let mut download =
+            File::create(mp.file_name()).expect("downloaded file creation should not fail");
         download.write_all(&download_buf).unwrap();
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::client::Client;
+    use common::model::file_info::FileInfo;
+    use common::model::merkle::MerkleProof;
+    use sha256::digest;
+    use std::fs::File;
+    use std::io::Read;
+
+    fn parse_files() -> (Vec<String>, Vec<FileInfo>) {
+        let file_names: Vec<String> = vec![
+            String::from("../files/cv.txt"),
+            String::from("../files/food.json"),
+        ];
+        let mut files = Vec::new();
+        for (i, f) in file_names.iter().enumerate() {
+            let mut file = File::open(&f).expect("file should be present");
+            let mut file_buf = Vec::new();
+            file.read_to_end(&mut file_buf).unwrap();
+            let file_info = FileInfo::new(i, f.clone(), file_buf);
+            files.push(file_info);
+        }
+        (file_names, files)
+    }
+
+    fn get_merkle_root() -> String {
+        let (_, expected_files) = parse_files();
+        let first = digest(expected_files[0].content());
+        let second = digest(expected_files[1].content());
+        digest(format!("{}{}", first, second))
+    }
+
+    #[test]
+    fn load_files_into_memory_works() {
+        let (file_names, expected_files) = parse_files();
+        let mut client = Client::new();
+        client.load_files_into_memory(file_names);
+        assert_eq!(client.files_count, 2);
+        for (expected_file, actual_file) in client.files.iter().zip(expected_files.iter()) {
+            assert_eq!(actual_file, expected_file)
+        }
+    }
+
+    #[test]
+    fn build_merkle_tree_and_save_to_disk_works() {
+        let (file_names, _) = parse_files();
+        let root_hash = get_merkle_root();
+        let mut client = Client::new();
+        client.load_files_into_memory(file_names);
+        client.build_merkle_tree_and_save_to_disk();
+        assert_eq!(client.merkle_root, root_hash);
+    }
+
+    #[test]
+    fn mock_server_has_correct_files() {
+        let (file_names, expected_files) = parse_files();
+        let mp = MerkleProof::new(
+            file_names[0].clone(),
+            expected_files[0].content(),
+            vec![(1, 1, digest(expected_files[1].content()))],
+        );
+        let mut client = Client::new();
+        let hashed = client.compute_merkle_root_from_proof(&mp, 0);
+        assert_eq!(hashed, get_merkle_root())
+    }
+
+    #[test]
+    fn mock_server_does_not_have_correct_files() {
+        let (file_names, mut expected_files) = parse_files();
+
+        let mut altered_content = expected_files[0].content();
+        altered_content[0] = 32u8;
+
+        let mp = MerkleProof::new(
+            file_names[0].clone(),
+            altered_content.clone(),
+            vec![(1, 1, digest(expected_files[1].content()))],
+        );
+        let mut client = Client::new();
+        let hashed = client.compute_merkle_root_from_proof(&mp, 0);
+        assert_ne!(hashed, get_merkle_root());
+        assert_eq!(
+            hashed,
+            digest(format!(
+                "{}{}",
+                digest(altered_content),
+                digest(expected_files[1].content())
+            ))
+        );
     }
 }

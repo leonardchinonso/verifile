@@ -186,7 +186,24 @@ pub struct MerkleProof {
 }
 
 impl MerkleProof {
-    pub fn build(tree: &MerkleTree, index: usize, file_name: String, file_content: Vec<u8>) -> Self {
+    pub fn new(
+        file_name: String,
+        file_content: Vec<u8>,
+        siblings: Vec<(usize, usize, String)>,
+    ) -> Self {
+        Self {
+            file_name,
+            file_content,
+            siblings,
+        }
+    }
+
+    pub fn build(
+        tree: &MerkleTree,
+        index: usize,
+        file_name: String,
+        file_content: Vec<u8>,
+    ) -> Self {
         let siblings = tree.get_siblings_of_merkle_path_nodes(index);
         Self {
             file_name,
